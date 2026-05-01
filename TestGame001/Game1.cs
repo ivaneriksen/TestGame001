@@ -197,7 +197,7 @@ namespace TestGame001
                     0f
                 );
 
-                // Draw the tower on top
+                // Draw the tower on top !
                 _spriteBatch.Draw(towerTexture, tower.Position, Color.White);
             }
 
