@@ -59,12 +59,23 @@ namespace TestGame001
         bool isBuildMode = false;
         Tower selectedTower = null; // currently clicked/selected placed tower, or null if none selected
 
+        bool showTowerDropdown = false;
+        Func<Vector2, Tower> selectedTowerFactory = pos => new BasicTower(pos);
+
+        Rectangle towerOptionBasicRect = new Rectangle(20, 90, 160, 50);
+        Rectangle towerOptionSniperRect = new Rectangle(20, 150, 160, 50);
+
+        // Shared tint for every range-indicator circle (selected tower, build preview, etc.) - change this
+        // one value to restyle all of them at once.
+        static readonly Color RangeIndicatorTint = Color.White * 0.4f;
+
         // UI bar (top of screen) and its buttons.
         Rectangle uiBarRect = new Rectangle(0, 0, GameConstants.ScreenWidth, GameConstants.UIBarHeight);
         Rectangle buildButtonRect = new Rectangle(20, 15, 120, 60);
         Rectangle targetClosestRect = new Rectangle(300, 15, 120, 40);
-        Rectangle targetHealthRect = new Rectangle(440, 15, 120, 40);
-        Rectangle targetExitRect = new Rectangle(580, 15, 120, 40);
+        Rectangle targetLeastHealthRect = new Rectangle(440, 15, 120, 40);
+        Rectangle targetMostHealthRect = new Rectangle(580, 15, 120, 40);
+        Rectangle targetExitRect = new Rectangle(300, 65, 120, 40);
 
         public Game1()
         {
@@ -133,34 +144,65 @@ namespace TestGame001
             bool clickedBuildButton = clickedThisFrame && buildButtonRect.Contains(mouseState.Position);
             bool clickedInBar = clickedThisFrame && uiBarRect.Contains(mouseState.Position);
 
-            // Toggle build mode with the B key or by clicking the build button.
-            if ((keyboardState.IsKeyDown(Keys.B) && !_previousKeyboardState.IsKeyDown(Keys.B)) || clickedBuildButton)
+            bool buildToggleTriggered = (keyboardState.IsKeyDown(Keys.B) && !_previousKeyboardState.IsKeyDown(Keys.B)) || clickedBuildButton;
+            if (buildToggleTriggered)
             {
-                isBuildMode = !isBuildMode;
+                if (isBuildMode)
+                {
+                    // Already placing - toggle off entirely.
+                    isBuildMode = false;
+                    showTowerDropdown = false;
+                }
+                else
+                {
+                    // Not placing yet - open the tower type dropdown instead of placing immediately.
+                    showTowerDropdown = !showTowerDropdown;
+                }
             }
 
-            // Right-click cancels build mode and clears the selected tower's info panel.
+            // Right-click cancels build mode, the dropdown, and clears the selected tower's info panel.
             if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
             {
                 isBuildMode = false;
+                showTowerDropdown = false;
                 selectedTower = null;
             }
 
-            // Place a tower on click while in build mode (but not if the click landed on the UI bar/button).
-            if (isBuildMode && clickedThisFrame && !clickedBuildButton && !clickedInBar)
+            // Picking a tower type from the dropdown commits to build mode for that type.
+            bool dropdownOptionClicked = false;
+            if (showTowerDropdown && clickedThisFrame)
+            {
+                if (towerOptionBasicRect.Contains(mouseState.Position))
+                {
+                    selectedTowerFactory = pos => new BasicTower(pos);
+                    isBuildMode = true;
+                    showTowerDropdown = false;
+                    dropdownOptionClicked = true;
+                }
+                else if (towerOptionSniperRect.Contains(mouseState.Position))
+                {
+                    selectedTowerFactory = pos => new SniperTower(pos);
+                    isBuildMode = true;
+                    showTowerDropdown = false;
+                    dropdownOptionClicked = true;
+                }
+            }
+
+            // Place a tower on click while in build mode.
+            if (isBuildMode && clickedThisFrame && !clickedBuildButton && !clickedInBar && !dropdownOptionClicked)
             {
                 int gridX = mouseState.X / GameConstants.GridSize;
                 int gridY = mouseState.Y / GameConstants.GridSize;
                 Vector2 snappedPosition = new Vector2(gridX * GameConstants.GridSize, gridY * GameConstants.GridSize);
 
-                if (!towers.Any(t => t.Position == snappedPosition))
+                if (!towers.Any(t => t.Position == snappedPosition) && IsBuildableTile(snappedPosition))
                 {
-                    towers.Add(new BasicTower(snappedPosition));
+                    towers.Add(selectedTowerFactory(snappedPosition));
                 }
             }
 
-            // Outside build mode, clicking a placed tower selects it; clicking elsewhere deselects.
-            if (!isBuildMode && clickedThisFrame && !clickedInBar)
+            // Outside build mode and with the dropdown closed, clicking a placed tower selects it.
+            if (!isBuildMode && !showTowerDropdown && clickedThisFrame && !clickedInBar)
             {
                 selectedTower = towers.FirstOrDefault(t =>
                     new Rectangle((int)t.Position.X, (int)t.Position.Y, GameConstants.GridSize, GameConstants.GridSize)
@@ -172,8 +214,10 @@ namespace TestGame001
             {
                 if (targetClosestRect.Contains(mouseState.Position))
                     selectedTower.TargetingMode = TargetingMode.ClosestToTower;
-                else if (targetHealthRect.Contains(mouseState.Position))
+                else if (targetMostHealthRect.Contains(mouseState.Position))
                     selectedTower.TargetingMode = TargetingMode.MostHealth;
+                else if (targetLeastHealthRect.Contains(mouseState.Position))
+                    selectedTower.TargetingMode = TargetingMode.LeastHealth;
                 else if (targetExitRect.Contains(mouseState.Position))
                     selectedTower.TargetingMode = TargetingMode.ClosestToExit;
             }
@@ -256,6 +300,7 @@ namespace TestGame001
             DrawTowers();
             DrawBuildPreview();
             DrawUIBar();
+            DrawTowerDropdown();
 
             _spriteBatch.End();
             base.Draw(gameTime);
@@ -333,7 +378,7 @@ namespace TestGame001
             // Range circle for the currently selected tower only (not shown for every tower).
             if (selectedTower != null)
             {
-                DrawRangeCircle(selectedTower.GetCenter(), selectedTower.Range, Color.White * 0.3f);
+                DrawRangeCircle(selectedTower.GetCenter(), selectedTower.Range, RangeIndicatorTint);
             }
         }
 
@@ -342,18 +387,28 @@ namespace TestGame001
             var mState = Mouse.GetState();
             if (!isBuildMode || mState.Y < GameConstants.PlayableAreaTop) return;
 
-            // Ghost tower at the snapped placement position.
             int previewX = (mState.X / GameConstants.GridSize) * GameConstants.GridSize;
             int previewY = (mState.Y / GameConstants.GridSize) * GameConstants.GridSize;
             Vector2 previewPos = new Vector2(previewX, previewY);
             Vector2 previewCenter = new Vector2(previewX + GameConstants.GridSize / 2, previewY + GameConstants.GridSize / 2);
 
-            _spriteBatch.Draw(towerTexture, previewPos, Color.White * 0.5f);
+            bool validPlacement = IsBuildableTile(previewPos) && !towers.Any(t => t.Position == previewPos);
+            Color ghostTint = validPlacement ? Color.White * 0.5f : Color.Red * 0.5f;
+            _spriteBatch.Draw(towerTexture, previewPos, ghostTint);
 
-            // Range preview for whichever tower type would be placed.
-            // (Currently always BasicTower - swap this reference once multiple buildable types exist.)
-            Tower selectedTowerType = new BasicTower(Vector2.Zero);
-            DrawRangeCircle(previewCenter, selectedTowerType.Range, Color.Green * 0.2f);
+            Tower selectedTowerType = selectedTowerFactory(Vector2.Zero);
+            DrawRangeCircle(previewCenter, selectedTowerType.Range, RangeIndicatorTint);
+        }
+
+        private void DrawTowerDropdown()
+        {
+            if (!showTowerDropdown) return;
+
+            _spriteBatch.Draw(pixel, towerOptionBasicRect, Color.DarkGray);
+            _spriteBatch.DrawString(uiFont, "BASIC", new Vector2(towerOptionBasicRect.X + 15, towerOptionBasicRect.Y + 15), Color.White);
+
+            _spriteBatch.Draw(pixel, towerOptionSniperRect, Color.DarkGray);
+            _spriteBatch.DrawString(uiFont, "SNIPER", new Vector2(towerOptionSniperRect.X + 15, towerOptionSniperRect.Y + 15), Color.White);
         }
 
         // Shared helper for drawing a tower's range as a circle centered on a world position.
@@ -378,8 +433,9 @@ namespace TestGame001
         {
             _spriteBatch.Draw(pixel, uiBarRect, Color.DarkSlateGray);
 
-            Color buttonColor = isBuildMode ? Color.LimeGreen : Color.DarkGray;
+            Color buttonColor = (isBuildMode || showTowerDropdown) ? Color.LimeGreen : Color.DarkGray;
             _spriteBatch.Draw(pixel, buildButtonRect, buttonColor);
+            _spriteBatch.DrawString(uiFont, "TOWER", new Vector2(buildButtonRect.X + 18, buildButtonRect.Y + 22), Color.White);
 
             if (selectedTower == null) return;
 
@@ -387,8 +443,11 @@ namespace TestGame001
             _spriteBatch.Draw(pixel, targetClosestRect, selectedTower.TargetingMode == TargetingMode.ClosestToTower ? Color.LimeGreen : Color.DarkGray);
             _spriteBatch.DrawString(uiFont, "CLOSEST", new Vector2(targetClosestRect.X + 8, targetClosestRect.Y + 10), Color.White);
 
-            _spriteBatch.Draw(pixel, targetHealthRect, selectedTower.TargetingMode == TargetingMode.MostHealth ? Color.LimeGreen : Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "MOST HP", new Vector2(targetHealthRect.X + 8, targetHealthRect.Y + 10), Color.White);
+            _spriteBatch.Draw(pixel, targetMostHealthRect, selectedTower.TargetingMode == TargetingMode.MostHealth ? Color.LimeGreen : Color.DarkGray);
+            _spriteBatch.DrawString(uiFont, "MOST HP", new Vector2(targetMostHealthRect.X + 8, targetMostHealthRect.Y + 10), Color.White);
+
+            _spriteBatch.Draw(pixel, targetLeastHealthRect, selectedTower.TargetingMode == TargetingMode.LeastHealth ? Color.LimeGreen : Color.DarkGray);
+            _spriteBatch.DrawString(uiFont, "LEAST HP", new Vector2(targetLeastHealthRect.X + 8, targetLeastHealthRect.Y + 10), Color.White);
 
             _spriteBatch.Draw(pixel, targetExitRect, selectedTower.TargetingMode == TargetingMode.ClosestToExit ? Color.LimeGreen : Color.DarkGray);
             _spriteBatch.DrawString(uiFont, "EXIT", new Vector2(targetExitRect.X + 8, targetExitRect.Y + 10), Color.White);
@@ -429,6 +488,8 @@ namespace TestGame001
             {
                 case TargetingMode.MostHealth:
                     return inRange.OrderByDescending(e => e.Health).FirstOrDefault();
+                case TargetingMode.LeastHealth:
+                    return inRange.OrderBy(e => e.Health).FirstOrDefault();
                 case TargetingMode.ClosestToExit:
                     return inRange.OrderBy(e => e.GetRemainingDistance(path)).FirstOrDefault();
                 case TargetingMode.ClosestToTower:
@@ -472,7 +533,16 @@ namespace TestGame001
                 pathTiles.Add(GridCellOf(end));
             }
         }
+        // True if this grid cell is plain grass - not part of the path, and not one of the
+        // grass/dirt transition tiles (edges/corners) bordering it.
+        private bool IsBuildableTile(Vector2 snappedPosition)
+        {
+            Point cell = new Point(
+                (int)(snappedPosition.X / GameConstants.GridSize),
+                (int)(snappedPosition.Y / GameConstants.GridSize));
 
+            return !pathTiles.Contains(cell) && !mapTileLookup.ContainsKey(cell);
+        }
         // Converts a world position to its containing grid cell. Uses Math.Floor (not integer
         // division) so negative coordinates snap correctly.
         private Point GridCellOf(Vector2 worldPos)
@@ -525,13 +595,13 @@ namespace TestGame001
                     else if (north && west)
                         mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConcaveTexture, Rotation = MathHelper.ToRadians(270) };
                     else if (ne && !north && !east)
-                        mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConvexTexture, Rotation = MathHelper.ToRadians(180) };
-                    else if (se && !south && !east)
-                        mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConvexTexture, Rotation = MathHelper.ToRadians(270) };
-                    else if (sw && !south && !west)
                         mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConvexTexture, Rotation = MathHelper.ToRadians(0) };
-                    else if (nw && !north && !west)
+                    else if (se && !south && !east)
                         mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConvexTexture, Rotation = MathHelper.ToRadians(90) };
+                    else if (sw && !south && !west)
+                        mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConvexTexture, Rotation = MathHelper.ToRadians(180) };
+                    else if (nw && !north && !west)
+                        mapTileLookup[cell] = new TileRenderInfo { Texture = cornerConvexTexture, Rotation = MathHelper.ToRadians(270) };
                 }
             }
         }

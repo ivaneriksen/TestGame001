@@ -40,7 +40,7 @@ namespace TestGame001
         public override TimeSpan Cooldown => TimeSpan.FromSeconds(1);
         public override float Range => 150f;
         public override float Damage => 10f;
-        public override float BulletSpeed => 600f;
+        public override float BulletSpeed => 1200f;
 
         public BasicTower(Vector2 position) : base(position) { }
     }
@@ -51,7 +51,7 @@ namespace TestGame001
         public override TimeSpan Cooldown => TimeSpan.FromSeconds(2.5);
         public override float Range => 350f;
         public override float Damage => 60f;
-        public override float BulletSpeed => 600f;
+        public override float BulletSpeed => 2400f;
 
         public SniperTower(Vector2 position) : base(position) { }
     }

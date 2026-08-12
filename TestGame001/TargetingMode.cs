@@ -5,6 +5,7 @@
     {
         ClosestToTower,  // targets whichever enemy is nearest to this tower
         MostHealth,      // targets whichever enemy currently has the most remaining health
+        LeastHealth,     // targets whichever enemy currently has the least remaining health
         ClosestToExit    // targets whichever enemy has the least remaining distance to travel along the path
     }
 }

@@ -48,28 +48,45 @@ namespace TestGame001
         // Returns the enemy that was hit this frame, or null if nothing was hit (yet, or ever).
         public Enemy Update(List<Enemy> enemies, float deltaSeconds)
         {
+            Vector2 previousPosition = Position;
             float moveDistance = Speed * deltaSeconds;
             Position += Direction * moveDistance;
             distanceTraveled += moveDistance;
 
-            // Check every active enemy's current position against the bullet's new position -
-            // this is a genuine per-frame collision check, not just "did I reach my original target".
+            // Check the entire path traveled this frame (not just the endpoint) against every active
+            // enemy, so fast bullets can't skip past a thin target between frames.
             foreach (var enemy in enemies)
             {
-                if (enemy.IsActive && Vector2.Distance(Position, enemy.GetCenter()) <= HitRadius)
+                if (!enemy.IsActive) continue;
+
+                Vector2 closestPoint = ClosestPointOnSegment(previousPosition, Position, enemy.GetCenter());
+                if (Vector2.Distance(closestPoint, enemy.GetCenter()) <= HitRadius)
                 {
+                    Position = closestPoint; // move the bullet to the hit point for visual effect
                     IsActive = false;
                     return enemy;
                 }
             }
 
-            // Traveled as far as this tower's range allows with nothing hit - the shot missed.
             if (distanceTraveled >= MaxRange)
             {
                 IsActive = false;
             }
 
             return null;
+        }
+
+        // Finds the closest point on segment a-b to point p, clamped to the segment itself
+        // (not the infinite line through a and b).
+        private static Vector2 ClosestPointOnSegment(Vector2 a, Vector2 b, Vector2 p)
+        {
+            Vector2 ab = b - a;
+            float lengthSquared = ab.LengthSquared();
+            if (lengthSquared < 0.0001f) return a; // a and b are the same point - no movement this frame
+
+            float t = Vector2.Dot(p - a, ab) / lengthSquared;
+            t = MathHelper.Clamp(t, 0f, 1f);
+            return a + ab * t;
         }
     }
 }
