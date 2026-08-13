@@ -18,5 +18,8 @@
 
         // Y coordinate where the playable map area begins (i.e. just below the UI bar).
         public const int PlayableAreaTop = UIBarHeight;
+
+        public const int DefaultButtonWidth = 120;
+        public const int DefaultButtonHeight = 40;
     }
 }

@@ -58,11 +58,12 @@ namespace TestGame001
         // --- UI state ---
         
         Tower selectedTower = null; // currently clicked/selected placed tower, or null if none selected
+        Enemy selectedEnemy = null;
 
-        
-        
 
-        
+
+
+
 
         // Shared tint for every range-indicator circle (selected tower, build preview, etc.) - change this
         // one value to restyle all of them at once.
@@ -70,8 +71,9 @@ namespace TestGame001
 
         // UI bar (top of screen) and its buttons.
         UIManager uiManager;
+        GameStateManager gameStateManager = new GameStateManager();
 
-        
+
 
         public Game1()
         {
@@ -141,12 +143,13 @@ namespace TestGame001
             bool clickedThisFrame = mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released;
 
             uiManager.Update(mouseState, _previousMouseState, keyboardState, _previousKeyboardState, selectedTower);
+            gameStateManager.Update(keyboardState, _previousKeyboardState, uiManager.PauseButtonClicked);
 
-            // Right-click cancels build mode/dropdown and clears the selected tower's info panel.
             if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
             {
                 uiManager.CancelBuildMode();
                 selectedTower = null;
+                selectedEnemy = null;
             }
 
             // Place a tower on click while in build mode.
@@ -162,76 +165,101 @@ namespace TestGame001
                 }
             }
 
-            // Outside build mode and with the dropdown closed, clicking a placed tower selects it.
+            // Outside build mode and with the dropdown closed, clicking a placed tower selects it;
+            // clicking empty space or an enemy elsewhere is handled below.
             if (!uiManager.IsBuildMode && !uiManager.ShowTowerDropdown && clickedThisFrame && !uiManager.IsPointInBar(mouseState.Position))
             {
-                selectedTower = towers.FirstOrDefault(t =>
+                Tower clickedTower = towers.FirstOrDefault(t =>
                     new Rectangle((int)t.Position.X, (int)t.Position.Y, GameConstants.GridSize, GameConstants.GridSize)
                         .Contains(mouseState.Position));
-            }
 
-            
+                if (clickedTower != null)
+                {
+                    selectedTower = clickedTower;
+                    selectedEnemy = null;
+                }
+                else
+                {
+                    Enemy clickedEnemy = enemies.FirstOrDefault(e =>
+                        new Rectangle((int)e.Position.X, (int)e.Position.Y, GameConstants.GridSize, GameConstants.GridSize)
+                            .Contains(mouseState.Position));
+
+                    if (clickedEnemy != null)
+                    {
+                        selectedEnemy = clickedEnemy;
+                        selectedTower = null;
+                    }
+                }
+            }
 
             _previousMouseState = mouseState;
             _previousKeyboardState = keyboardState;
 
-            // Tower firing: each tower on cooldown picks a target per its TargetingMode and fires.
-            foreach (var tower in towers)
+            if (!gameStateManager.IsPaused)
             {
-                tower.TimeSinceLastShot += gameTime.ElapsedGameTime;
-                if (tower.TimeSinceLastShot >= tower.Cooldown)
+                // Tower firing: each tower on cooldown picks a target per its TargetingMode and fires.
+                foreach (var tower in towers)
                 {
-                    Enemy target = SelectTarget(tower);
-                    if (target != null)
+                    tower.TimeSinceLastShot += gameTime.ElapsedGameTime;
+                    if (tower.TimeSinceLastShot >= tower.Cooldown)
                     {
-                        bullets.Add(new Bullet(tower.GetCenter(), target.GetCenter(), tower.Damage, tower.BulletSpeed, tower.Range));
-                        tower.TimeSinceLastShot = TimeSpan.Zero;
+                        Enemy target = SelectTarget(tower);
+                        if (target != null)
+                        {
+                            bullets.Add(new Bullet(tower.GetCenter(), target.GetCenter(), tower.Damage, tower.BulletSpeed, tower.Range));
+                            tower.TimeSinceLastShot = TimeSpan.Zero;
+                        }
                     }
                 }
-            }
 
-            // Bullet movement/collision.
-            foreach (var bullet in bullets)
-            {
-                Enemy hitEnemy = bullet.Update(enemies, (float)gameTime.ElapsedGameTime.TotalSeconds);
-                if (hitEnemy != null)
+                // Bullet movement/collision.
+                foreach (var bullet in bullets)
                 {
-                    hitEnemy.Health -= bullet.Damage;
-                    if (hitEnemy.Health <= 0) hitEnemy.IsActive = false;
-                }
-            }
-            bullets.RemoveAll(b => !b.IsActive);
-            enemies.RemoveAll(e => !e.IsActive);
-
-            // Enemy spawn timer.
-            spawnTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
-            if (spawnTimer > 2.0f)
-            {
-                enemies.Add(new BasicEnemy(path[0], enemyTexture));
-                spawnTimer = 0;
-            }
-
-            // Enemy movement along the path.
-            foreach (var enemy in enemies)
-            {
-                if (enemy.CurrentWaypointIndex < path.Count)
-                {
-                    Vector2 target = path[enemy.CurrentWaypointIndex];
-                    Vector2 direction = target - enemy.Position;
-
-                    if (direction.Length() < enemy.Speed)
+                    Enemy hitEnemy = bullet.Update(enemies, (float)gameTime.ElapsedGameTime.TotalSeconds);
+                    if (hitEnemy != null)
                     {
-                        enemy.CurrentWaypointIndex++; // Reached this waypoint - advance to the next.
+                        hitEnemy.Health -= bullet.Damage;
+                        if (hitEnemy.Health <= 0) hitEnemy.IsActive = false;
+                    }
+                }
+                bullets.RemoveAll(b => !b.IsActive);
+                enemies.RemoveAll(e => !e.IsActive);
+
+                if (selectedEnemy != null && !selectedEnemy.IsActive)
+                {
+                    selectedEnemy = null;
+                }
+
+                // Enemy spawn timer.
+                spawnTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
+                if (spawnTimer > 2.0f)
+                {
+                    enemies.Add(new BasicEnemy(path[0], enemyTexture));
+                    spawnTimer = 0;
+                }
+
+                // Enemy movement along the path.
+                foreach (var enemy in enemies)
+                {
+                    if (enemy.CurrentWaypointIndex < path.Count)
+                    {
+                        Vector2 target = path[enemy.CurrentWaypointIndex];
+                        Vector2 direction = target - enemy.Position;
+
+                        if (direction.Length() < enemy.Speed)
+                        {
+                            enemy.CurrentWaypointIndex++; // Reached this waypoint - advance to the next.
+                        }
+                        else
+                        {
+                            direction.Normalize();
+                            enemy.Position += direction * enemy.Speed;
+                        }
                     }
                     else
                     {
-                        direction.Normalize();
-                        enemy.Position += direction * enemy.Speed;
+                        enemy.IsActive = false; // Reached the end of the path - exited.
                     }
-                }
-                else
-                {
-                    enemy.IsActive = false; // Reached the end of the path - exited.
                 }
             }
 
@@ -249,7 +277,8 @@ namespace TestGame001
             DrawBullets();
             DrawTowers();
             DrawBuildPreview();
-            uiManager.Draw(_spriteBatch, selectedTower);
+            uiManager.Draw(_spriteBatch, selectedTower, selectedEnemy, gameStateManager.IsPaused);
+            gameStateManager.Draw(_spriteBatch, pixel, uiFont, GraphicsDevice.Viewport.Bounds);
 
             _spriteBatch.End();
             base.Draw(gameTime);

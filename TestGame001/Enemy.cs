@@ -8,6 +8,8 @@ namespace TestGame001
     // concrete subclass, each of which fixes its own health/speed.
     public abstract class Enemy
     {
+
+        public string Name { get; }
         // Top-left world position, updated every frame as the enemy moves along the path.
         public Vector2 Position;
 
@@ -27,6 +29,7 @@ namespace TestGame001
 
         protected Enemy(Vector2 startPosition, int maxHealth, float speed, Texture2D texture)
         {
+            Name = MonsterNameGenerator.Generate();
             Position = startPosition;
             MaxHealth = maxHealth;
             Health = maxHealth;
