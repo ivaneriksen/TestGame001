@@ -56,26 +56,22 @@ namespace TestGame001
         MouseState _previousMouseState = new MouseState();
 
         // --- UI state ---
-        bool isBuildMode = false;
+        
         Tower selectedTower = null; // currently clicked/selected placed tower, or null if none selected
 
-        bool showTowerDropdown = false;
-        Func<Vector2, Tower> selectedTowerFactory = pos => new BasicTower(pos);
+        
+        
 
-        Rectangle towerOptionBasicRect = new Rectangle(20, 90, 160, 50);
-        Rectangle towerOptionSniperRect = new Rectangle(20, 150, 160, 50);
+        
 
         // Shared tint for every range-indicator circle (selected tower, build preview, etc.) - change this
         // one value to restyle all of them at once.
         static readonly Color RangeIndicatorTint = Color.White * 0.4f;
 
         // UI bar (top of screen) and its buttons.
-        Rectangle uiBarRect = new Rectangle(0, 0, GameConstants.ScreenWidth, GameConstants.UIBarHeight);
-        Rectangle buildButtonRect = new Rectangle(20, 15, 120, 60);
-        Rectangle targetClosestRect = new Rectangle(300, 15, 120, 40);
-        Rectangle targetLeastHealthRect = new Rectangle(440, 15, 120, 40);
-        Rectangle targetMostHealthRect = new Rectangle(580, 15, 120, 40);
-        Rectangle targetExitRect = new Rectangle(300, 65, 120, 40);
+        UIManager uiManager;
+
+        
 
         public Game1()
         {
@@ -130,6 +126,8 @@ namespace TestGame001
 
             pixel = new Texture2D(GraphicsDevice, 1, 1);
             pixel.SetData(new[] { Color.White });
+
+            uiManager = new UIManager(uiFont, pixel);
         }
 
         protected override void Update(GameTime gameTime)
@@ -141,55 +139,18 @@ namespace TestGame001
             var mouseState = Mouse.GetState();
 
             bool clickedThisFrame = mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released;
-            bool clickedBuildButton = clickedThisFrame && buildButtonRect.Contains(mouseState.Position);
-            bool clickedInBar = clickedThisFrame && uiBarRect.Contains(mouseState.Position);
 
-            bool buildToggleTriggered = (keyboardState.IsKeyDown(Keys.B) && !_previousKeyboardState.IsKeyDown(Keys.B)) || clickedBuildButton;
-            if (buildToggleTriggered)
-            {
-                if (isBuildMode)
-                {
-                    // Already placing - toggle off entirely.
-                    isBuildMode = false;
-                    showTowerDropdown = false;
-                }
-                else
-                {
-                    // Not placing yet - open the tower type dropdown instead of placing immediately.
-                    showTowerDropdown = !showTowerDropdown;
-                }
-            }
+            uiManager.Update(mouseState, _previousMouseState, keyboardState, _previousKeyboardState, selectedTower);
 
-            // Right-click cancels build mode, the dropdown, and clears the selected tower's info panel.
+            // Right-click cancels build mode/dropdown and clears the selected tower's info panel.
             if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
             {
-                isBuildMode = false;
-                showTowerDropdown = false;
+                uiManager.CancelBuildMode();
                 selectedTower = null;
             }
 
-            // Picking a tower type from the dropdown commits to build mode for that type.
-            bool dropdownOptionClicked = false;
-            if (showTowerDropdown && clickedThisFrame)
-            {
-                if (towerOptionBasicRect.Contains(mouseState.Position))
-                {
-                    selectedTowerFactory = pos => new BasicTower(pos);
-                    isBuildMode = true;
-                    showTowerDropdown = false;
-                    dropdownOptionClicked = true;
-                }
-                else if (towerOptionSniperRect.Contains(mouseState.Position))
-                {
-                    selectedTowerFactory = pos => new SniperTower(pos);
-                    isBuildMode = true;
-                    showTowerDropdown = false;
-                    dropdownOptionClicked = true;
-                }
-            }
-
             // Place a tower on click while in build mode.
-            if (isBuildMode && clickedThisFrame && !clickedBuildButton && !clickedInBar && !dropdownOptionClicked)
+            if (uiManager.IsBuildMode && clickedThisFrame && !uiManager.ConsumedClickThisFrame)
             {
                 int gridX = mouseState.X / GameConstants.GridSize;
                 int gridY = mouseState.Y / GameConstants.GridSize;
@@ -197,30 +158,19 @@ namespace TestGame001
 
                 if (!towers.Any(t => t.Position == snappedPosition) && IsBuildableTile(snappedPosition))
                 {
-                    towers.Add(selectedTowerFactory(snappedPosition));
+                    towers.Add(uiManager.SelectedTowerFactory(snappedPosition));
                 }
             }
 
             // Outside build mode and with the dropdown closed, clicking a placed tower selects it.
-            if (!isBuildMode && !showTowerDropdown && clickedThisFrame && !clickedInBar)
+            if (!uiManager.IsBuildMode && !uiManager.ShowTowerDropdown && clickedThisFrame && !uiManager.IsPointInBar(mouseState.Position))
             {
                 selectedTower = towers.FirstOrDefault(t =>
                     new Rectangle((int)t.Position.X, (int)t.Position.Y, GameConstants.GridSize, GameConstants.GridSize)
                         .Contains(mouseState.Position));
             }
 
-            // While a tower is selected, clicking a targeting button changes its targeting mode.
-            if (selectedTower != null && clickedThisFrame)
-            {
-                if (targetClosestRect.Contains(mouseState.Position))
-                    selectedTower.TargetingMode = TargetingMode.ClosestToTower;
-                else if (targetMostHealthRect.Contains(mouseState.Position))
-                    selectedTower.TargetingMode = TargetingMode.MostHealth;
-                else if (targetLeastHealthRect.Contains(mouseState.Position))
-                    selectedTower.TargetingMode = TargetingMode.LeastHealth;
-                else if (targetExitRect.Contains(mouseState.Position))
-                    selectedTower.TargetingMode = TargetingMode.ClosestToExit;
-            }
+            
 
             _previousMouseState = mouseState;
             _previousKeyboardState = keyboardState;
@@ -299,8 +249,7 @@ namespace TestGame001
             DrawBullets();
             DrawTowers();
             DrawBuildPreview();
-            DrawUIBar();
-            DrawTowerDropdown();
+            uiManager.Draw(_spriteBatch, selectedTower);
 
             _spriteBatch.End();
             base.Draw(gameTime);
@@ -385,7 +334,7 @@ namespace TestGame001
         private void DrawBuildPreview()
         {
             var mState = Mouse.GetState();
-            if (!isBuildMode || mState.Y < GameConstants.PlayableAreaTop) return;
+            if (!uiManager.IsBuildMode || mState.Y < GameConstants.PlayableAreaTop) return;
 
             int previewX = (mState.X / GameConstants.GridSize) * GameConstants.GridSize;
             int previewY = (mState.Y / GameConstants.GridSize) * GameConstants.GridSize;
@@ -396,20 +345,11 @@ namespace TestGame001
             Color ghostTint = validPlacement ? Color.White * 0.5f : Color.Red * 0.5f;
             _spriteBatch.Draw(towerTexture, previewPos, ghostTint);
 
-            Tower selectedTowerType = selectedTowerFactory(Vector2.Zero);
+            Tower selectedTowerType = uiManager.SelectedTowerFactory(Vector2.Zero);
             DrawRangeCircle(previewCenter, selectedTowerType.Range, RangeIndicatorTint);
         }
 
-        private void DrawTowerDropdown()
-        {
-            if (!showTowerDropdown) return;
-
-            _spriteBatch.Draw(pixel, towerOptionBasicRect, Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "BASIC", new Vector2(towerOptionBasicRect.X + 15, towerOptionBasicRect.Y + 15), Color.White);
-
-            _spriteBatch.Draw(pixel, towerOptionSniperRect, Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "SNIPER", new Vector2(towerOptionSniperRect.X + 15, towerOptionSniperRect.Y + 15), Color.White);
-        }
+        
 
         // Shared helper for drawing a tower's range as a circle centered on a world position.
         private void DrawRangeCircle(Vector2 center, float range, Color tint)
@@ -429,51 +369,7 @@ namespace TestGame001
             );
         }
 
-        private void DrawUIBar()
-        {
-            _spriteBatch.Draw(pixel, uiBarRect, Color.DarkSlateGray);
-
-            Color buttonColor = (isBuildMode || showTowerDropdown) ? Color.LimeGreen : Color.DarkGray;
-            _spriteBatch.Draw(pixel, buildButtonRect, buttonColor);
-            _spriteBatch.DrawString(uiFont, "TOWER", new Vector2(buildButtonRect.X + 18, buildButtonRect.Y + 22), Color.White);
-
-            if (selectedTower == null) return;
-
-            // Targeting mode buttons - highlighted green when active.
-            _spriteBatch.Draw(pixel, targetClosestRect, selectedTower.TargetingMode == TargetingMode.ClosestToTower ? Color.LimeGreen : Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "CLOSEST", new Vector2(targetClosestRect.X + 8, targetClosestRect.Y + 10), Color.White);
-
-            _spriteBatch.Draw(pixel, targetMostHealthRect, selectedTower.TargetingMode == TargetingMode.MostHealth ? Color.LimeGreen : Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "MOST HP", new Vector2(targetMostHealthRect.X + 8, targetMostHealthRect.Y + 10), Color.White);
-
-            _spriteBatch.Draw(pixel, targetLeastHealthRect, selectedTower.TargetingMode == TargetingMode.LeastHealth ? Color.LimeGreen : Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "LEAST HP", new Vector2(targetLeastHealthRect.X + 8, targetLeastHealthRect.Y + 10), Color.White);
-
-            _spriteBatch.Draw(pixel, targetExitRect, selectedTower.TargetingMode == TargetingMode.ClosestToExit ? Color.LimeGreen : Color.DarkGray);
-            _spriteBatch.DrawString(uiFont, "EXIT", new Vector2(targetExitRect.X + 8, targetExitRect.Y + 10), Color.White);
-
-            // Stats readout - labels and values drawn as separate fixed columns so numbers stay
-            // aligned regardless of font metrics.
-            Vector2 statsOrigin = new Vector2(750, 10);
-            int lineHeight = 22;
-            int valueColumnX = 150;
-
-            string[] labels = { "Damage:", "Bullet speed:", "Range:", "Cooldown:" };
-            string[] values =
-            {
-                selectedTower.Damage.ToString(),
-                selectedTower.BulletSpeed.ToString(),
-                selectedTower.Range.ToString(),
-                selectedTower.Cooldown.TotalSeconds + "s"
-            };
-
-            for (int i = 0; i < labels.Length; i++)
-            {
-                Vector2 rowPos = statsOrigin + new Vector2(0, i * lineHeight);
-                _spriteBatch.DrawString(uiFont, labels[i], rowPos, Color.White);
-                _spriteBatch.DrawString(uiFont, values[i], rowPos + new Vector2(valueColumnX, 0), Color.White);
-            }
-        }
+        
 
         // --- Targeting ---
 
@@ -492,6 +388,19 @@ namespace TestGame001
                     return inRange.OrderBy(e => e.Health).FirstOrDefault();
                 case TargetingMode.ClosestToExit:
                     return inRange.OrderBy(e => e.GetRemainingDistance(path)).FirstOrDefault();
+                case TargetingMode.ClosestToEntrance:
+                    return inRange.OrderByDescending(e => e.GetRemainingDistance(path)).FirstOrDefault();
+                case TargetingMode.Focus:
+                    bool needsNewTarget = tower.CurrentTarget == null
+                        || !tower.CurrentTarget.IsActive
+                        || Vector2.Distance(tower.GetCenter(), tower.CurrentTarget.GetCenter()) > tower.Range;
+
+                    if (needsNewTarget)
+                    {
+                        tower.CurrentTarget = inRange.OrderByDescending(e => e.GetRemainingDistance(path)).FirstOrDefault();
+                    }
+
+                    return tower.CurrentTarget;
                 case TargetingMode.ClosestToTower:
                 default:
                     return inRange.OrderBy(e => Vector2.Distance(tower.GetCenter(), e.GetCenter())).FirstOrDefault();

@@ -24,6 +24,8 @@ namespace TestGame001
         public abstract float Damage { get; }
         public abstract float BulletSpeed { get; }
 
+        public Enemy CurrentTarget { get; set; }
+
         protected Tower(Vector2 position)
         {
             Position = position;
