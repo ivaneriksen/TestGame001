@@ -17,7 +17,7 @@ namespace TestGame001
         private static readonly string[] Middles =
         {
             "ul", "ath", "or", "en", "ir", "ok", "ash", "und", "arn", "esh",
-            "ol", "ux", "in", "az", "oth"
+            "ol", "ux", "in", "az", "oth", "yor", "el", "um", "irn", "ash"
         };
 
         private static readonly string[] Suffixes =

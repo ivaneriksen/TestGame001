@@ -7,7 +7,6 @@
         MostHealth,
         LeastHealth,
         ClosestToExit,
-        ClosestToEntrance,
-        Focus
+        ClosestToEntrance
     }
 }

@@ -21,5 +21,12 @@
 
         public const int DefaultButtonWidth = 120;
         public const int DefaultButtonHeight = 40;
+
+        public const int BasicTowerBaseCost = 50;
+        public const float TowerPriceIncreaseRate = 0.20f;
+        public const int StartingGold = 160; // 3 starting towers
+
+        public const float EnemyScale = 0.45f;
+        public const float WaypointRadius = GridSize * 0.4f;
     }
 }

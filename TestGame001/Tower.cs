@@ -23,6 +23,7 @@ namespace TestGame001
         public abstract float Range { get; }
         public abstract float Damage { get; }
         public abstract float BulletSpeed { get; }
+        public bool FocusEnabled { get; set; }
 
         public Enemy CurrentTarget { get; set; }
 
@@ -42,7 +43,7 @@ namespace TestGame001
         public override TimeSpan Cooldown => TimeSpan.FromSeconds(1);
         public override float Range => 150f;
         public override float Damage => 10f;
-        public override float BulletSpeed => 1200f;
+        public override float BulletSpeed => 1800f;
 
         public BasicTower(Vector2 position) : base(position) { }
     }

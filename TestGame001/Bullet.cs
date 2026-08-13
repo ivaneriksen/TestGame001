@@ -21,7 +21,7 @@ namespace TestGame001
         public float Damage;
 
         // How close (in pixels) the bullet needs to be to an enemy's center to register a hit.
-        public float HitRadius = 16f;
+        public float HitRadius = 16f * GameConstants.EnemyScale;
 
         // Total distance this bullet can travel before it expires with no hit (matches the firing tower's range).
         public float MaxRange;

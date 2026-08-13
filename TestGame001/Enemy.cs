@@ -26,8 +26,10 @@ namespace TestGame001
 
         // Current remaining health; ticks down as bullets land.
         public float Health { get; set; }
+        public int GoldValue { get; }
+        public Vector2 CurrentTargetPoint { get; set; }
 
-        protected Enemy(Vector2 startPosition, int maxHealth, float speed, Texture2D texture)
+        protected Enemy(Vector2 startPosition, int maxHealth, float speed, Texture2D texture, int goldValue)
         {
             Name = MonsterNameGenerator.Generate();
             Position = startPosition;
@@ -35,6 +37,7 @@ namespace TestGame001
             Health = maxHealth;
             Speed = speed;
             Texture = texture;
+            GoldValue = goldValue;
         }
 
         // World-space center of this enemy's tile - used for range checks, targeting, and bullet collision.
@@ -68,20 +71,20 @@ namespace TestGame001
     public class BasicEnemy : Enemy
     {
         public BasicEnemy(Vector2 startPosition, Texture2D texture)
-            : base(startPosition, maxHealth: 50, speed: 2f, texture) { }
+            : base(startPosition, maxHealth: 50, speed: 2f, texture, 2) { }
     }
 
     // Low health, high speed.
     public class FastEnemy : Enemy
     {
         public FastEnemy(Vector2 startPosition, Texture2D texture)
-            : base(startPosition, maxHealth: 50, speed: 4f, texture) { }
+            : base(startPosition, maxHealth: 50, speed: 4f, texture, 2) { }
     }
 
     // High health, low speed.
     public class TankEnemy : Enemy
     {
         public TankEnemy(Vector2 startPosition, Texture2D texture)
-            : base(startPosition, maxHealth: 300, speed: 1f, texture) { }
+            : base(startPosition, maxHealth: 300, speed: 1f, texture, 2) { }
     }
 }

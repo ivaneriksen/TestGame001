@@ -13,6 +13,8 @@ namespace TestGame001
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
 
+        private readonly Random random = new Random();
+
         // --- Map tile textures ---
         Texture2D grassMapTexture;
         Texture2D dirtMapTexture;
@@ -73,7 +75,7 @@ namespace TestGame001
         UIManager uiManager;
         GameStateManager gameStateManager = new GameStateManager();
 
-
+        Economy economy = new Economy(GameConstants.StartingGold);
 
         public Game1()
         {
@@ -97,7 +99,7 @@ namespace TestGame001
             path.Add(SnapToGrid(new Vector2(480, 320)));
             path.Add(SnapToGrid(new Vector2(180, 320)));
             path.Add(SnapToGrid(new Vector2(180, 720)));
-            path.Add(SnapToGrid(new Vector2(1940, 720)));   // Exit
+            path.Add(SnapToGrid(new Vector2(1968, 720)));   // Exit
 
             GeneratePathTiles();
 
@@ -159,9 +161,12 @@ namespace TestGame001
                 int gridY = mouseState.Y / GameConstants.GridSize;
                 Vector2 snappedPosition = new Vector2(gridX * GameConstants.GridSize, gridY * GameConstants.GridSize);
 
-                if (!towers.Any(t => t.Position == snappedPosition) && IsBuildableTile(snappedPosition))
+                Type selectedType = uiManager.SelectedTowerFactory(Vector2.Zero).GetType();
+
+                if (!towers.Any(t => t.Position == snappedPosition) && IsBuildableTile(snappedPosition) && economy.CanAfford(selectedType))
                 {
                     towers.Add(uiManager.SelectedTowerFactory(snappedPosition));
+                    economy.PurchaseTower(selectedType);
                 }
             }
 
@@ -181,8 +186,16 @@ namespace TestGame001
                 else
                 {
                     Enemy clickedEnemy = enemies.FirstOrDefault(e =>
-                        new Rectangle((int)e.Position.X, (int)e.Position.Y, GameConstants.GridSize, GameConstants.GridSize)
-                            .Contains(mouseState.Position));
+                    {
+                        float hitboxWidth = enemyTexture.Width * GameConstants.EnemyScale;
+                        float hitboxHeight = enemyTexture.Height * GameConstants.EnemyScale;
+                        Vector2 center = e.Position + new Vector2(GameConstants.GridSize / 2f, GameConstants.GridSize / 2f);
+                        Rectangle hitbox = new Rectangle(
+                            (int)(center.X - hitboxWidth / 2f),
+                            (int)(center.Y - hitboxHeight / 2f),
+                            (int)hitboxWidth, (int)hitboxHeight);
+                        return hitbox.Contains(mouseState.Position);
+                    });
 
                     if (clickedEnemy != null)
                     {
@@ -219,7 +232,11 @@ namespace TestGame001
                     if (hitEnemy != null)
                     {
                         hitEnemy.Health -= bullet.Damage;
-                        if (hitEnemy.Health <= 0) hitEnemy.IsActive = false;
+                        if (hitEnemy.Health <= 0)
+                        {
+                            hitEnemy.IsActive = false;
+                            economy.AddGold(hitEnemy.GoldValue);
+                        }
                     }
                 }
                 bullets.RemoveAll(b => !b.IsActive);
@@ -234,7 +251,9 @@ namespace TestGame001
                 spawnTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
                 if (spawnTimer > 2.0f)
                 {
-                    enemies.Add(new BasicEnemy(path[0], enemyTexture));
+                    var newEnemy = new BasicEnemy(path[0], enemyTexture);
+                    newEnemy.CurrentTargetPoint = GetRandomPointInWaypointCircle(path[0], GameConstants.WaypointRadius);
+                    enemies.Add(newEnemy);
                     spawnTimer = 0;
                 }
 
@@ -243,12 +262,16 @@ namespace TestGame001
                 {
                     if (enemy.CurrentWaypointIndex < path.Count)
                     {
-                        Vector2 target = path[enemy.CurrentWaypointIndex];
-                        Vector2 direction = target - enemy.Position;
+                        Vector2 direction = enemy.CurrentTargetPoint - enemy.Position;
 
                         if (direction.Length() < enemy.Speed)
                         {
-                            enemy.CurrentWaypointIndex++; // Reached this waypoint - advance to the next.
+                            enemy.CurrentWaypointIndex++;
+
+                            if (enemy.CurrentWaypointIndex < path.Count)
+                            {
+                                enemy.CurrentTargetPoint = GetRandomPointInWaypointCircle(path[enemy.CurrentWaypointIndex], GameConstants.WaypointRadius);
+                            }
                         }
                         else
                         {
@@ -258,7 +281,7 @@ namespace TestGame001
                     }
                     else
                     {
-                        enemy.IsActive = false; // Reached the end of the path - exited.
+                        enemy.IsActive = false;
                     }
                 }
             }
@@ -277,7 +300,7 @@ namespace TestGame001
             DrawBullets();
             DrawTowers();
             DrawBuildPreview();
-            uiManager.Draw(_spriteBatch, selectedTower, selectedEnemy, gameStateManager.IsPaused);
+            uiManager.Draw(_spriteBatch, selectedTower, selectedEnemy, gameStateManager.IsPaused, economy.Gold);
             gameStateManager.Draw(_spriteBatch, pixel, uiFont, GraphicsDevice.Viewport.Bounds);
 
             _spriteBatch.End();
@@ -325,13 +348,28 @@ namespace TestGame001
         {
             foreach (var enemy in enemies)
             {
-                _spriteBatch.Draw(enemyTexture, enemy.Position, Color.White);
+                Vector2 origin = new Vector2(enemyTexture.Width / 2f, enemyTexture.Height / 2f);
+                Vector2 drawCenter = enemy.Position + new Vector2(GameConstants.GridSize / 2f, GameConstants.GridSize / 2f);
 
-                // Health bar above the enemy.
+                _spriteBatch.Draw(
+                    enemyTexture,
+                    drawCenter,
+                    null,
+                    Color.White,
+                    0f,
+                    origin,
+                    GameConstants.EnemyScale,
+                    SpriteEffects.None,
+                    0f
+                );
+
+                // Health bar above the enemy - scaled to match the smaller sprite width.
                 float healthPercent = enemy.Health / enemy.MaxHealth;
-                int barWidth = GameConstants.GridSize;
+                int barWidth = (int)(GameConstants.GridSize * GameConstants.EnemyScale);
                 int barHeight = 5;
-                Vector2 barPos = enemy.Position + new Vector2(0, -barHeight - 2);
+                Vector2 barPos = new Vector2(
+                    drawCenter.X - barWidth / 2f,
+                    drawCenter.Y - (enemyTexture.Height * GameConstants.EnemyScale / 2f) - barHeight - 2);
 
                 _spriteBatch.Draw(pixel, new Rectangle((int)barPos.X, (int)barPos.Y, barWidth, barHeight), Color.DarkRed);
                 _spriteBatch.Draw(pixel, new Rectangle((int)barPos.X, (int)barPos.Y, (int)(barWidth * healthPercent), barHeight), Color.LimeGreen);
@@ -370,11 +408,14 @@ namespace TestGame001
             Vector2 previewPos = new Vector2(previewX, previewY);
             Vector2 previewCenter = new Vector2(previewX + GameConstants.GridSize / 2, previewY + GameConstants.GridSize / 2);
 
+            Tower selectedTowerType = uiManager.SelectedTowerFactory(Vector2.Zero);
+
             bool validPlacement = IsBuildableTile(previewPos) && !towers.Any(t => t.Position == previewPos);
-            Color ghostTint = validPlacement ? Color.White * 0.5f : Color.Red * 0.5f;
+            bool canAfford = economy.CanAfford(selectedTowerType.GetType());
+            Color ghostTint = (validPlacement && canAfford) ? Color.White * 0.5f : Color.Red * 0.5f;
             _spriteBatch.Draw(towerTexture, previewPos, ghostTint);
 
-            Tower selectedTowerType = uiManager.SelectedTowerFactory(Vector2.Zero);
+            
             DrawRangeCircle(previewCenter, selectedTowerType.Range, RangeIndicatorTint);
         }
 
@@ -409,31 +450,40 @@ namespace TestGame001
             var inRange = enemies.Where(e =>
                 e.IsActive && Vector2.Distance(tower.GetCenter(), e.GetCenter()) <= tower.Range);
 
+            if (tower.FocusEnabled)
+            {
+                bool currentTargetStillValid = tower.CurrentTarget != null
+                    && tower.CurrentTarget.IsActive
+                    && Vector2.Distance(tower.GetCenter(), tower.CurrentTarget.GetCenter()) <= tower.Range;
+
+                if (currentTargetStillValid)
+                {
+                    return tower.CurrentTarget;
+                }
+            }
+
+            Enemy picked;
             switch (tower.TargetingMode)
             {
                 case TargetingMode.MostHealth:
-                    return inRange.OrderByDescending(e => e.Health).FirstOrDefault();
+                    picked = inRange.OrderByDescending(e => e.Health).FirstOrDefault();
+                    break;
                 case TargetingMode.LeastHealth:
-                    return inRange.OrderBy(e => e.Health).FirstOrDefault();
+                    picked = inRange.OrderBy(e => e.Health).FirstOrDefault();
+                    break;
                 case TargetingMode.ClosestToExit:
-                    return inRange.OrderBy(e => e.GetRemainingDistance(path)).FirstOrDefault();
+                    picked = inRange.OrderBy(e => e.GetRemainingDistance(path)).FirstOrDefault();
+                    break;
                 case TargetingMode.ClosestToEntrance:
-                    return inRange.OrderByDescending(e => e.GetRemainingDistance(path)).FirstOrDefault();
-                case TargetingMode.Focus:
-                    bool needsNewTarget = tower.CurrentTarget == null
-                        || !tower.CurrentTarget.IsActive
-                        || Vector2.Distance(tower.GetCenter(), tower.CurrentTarget.GetCenter()) > tower.Range;
-
-                    if (needsNewTarget)
-                    {
-                        tower.CurrentTarget = inRange.OrderByDescending(e => e.GetRemainingDistance(path)).FirstOrDefault();
-                    }
-
-                    return tower.CurrentTarget;
+                    picked = inRange.OrderByDescending(e => e.GetRemainingDistance(path)).FirstOrDefault();
+                    break;
                 case TargetingMode.ClosestToTower:
                 default:
-                    return inRange.OrderBy(e => Vector2.Distance(tower.GetCenter(), e.GetCenter())).FirstOrDefault();
+                    picked = inRange.OrderBy(e => Vector2.Distance(tower.GetCenter(), e.GetCenter())).FirstOrDefault();
+                    break;
             }
+            tower.CurrentTarget = picked;
+            return picked;
         }
 
         // --- Grid / path helpers ---
@@ -488,6 +538,15 @@ namespace TestGame001
             int gx = (int)Math.Floor(worldPos.X / GameConstants.GridSize);
             int gy = (int)Math.Floor(worldPos.Y / GameConstants.GridSize);
             return new Point(gx, gy);
+        }
+
+        private Vector2 GetRandomPointInWaypointCircle(Vector2 center, float radius)
+        {
+            double angle = random.NextDouble() * Math.PI * 2;
+            double distance = random.NextDouble() * radius;
+            return center + new Vector2(
+                (float)(Math.Cos(angle) * distance),
+                (float)(Math.Sin(angle) * distance));
         }
 
         // Builds mapTileLookup: for every grass cell bordering the path, picks the correct

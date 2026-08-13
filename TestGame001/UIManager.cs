@@ -30,7 +30,7 @@ namespace TestGame001
         public Rectangle TargetLeastHealthRect { get; private set; }
         public Rectangle TargetExitRect { get; private set; }
         public Rectangle TargetEntranceRect { get; private set; }
-        public Rectangle TargetFocusRect { get; private set; }
+        public Rectangle TargetFocusRect { get; private set; } // repurposed as the Focus *toggle* button now
 
         public UIManager(SpriteFont uiFont, Texture2D pixel)
         {
@@ -146,8 +146,7 @@ namespace TestGame001
                 }
                 else if (TargetFocusRect.Contains(mouseState.Position))
                 {
-                    selectedTower.TargetingMode = TargetingMode.Focus;
-                    selectedTower.CurrentTarget = null;
+                    selectedTower.FocusEnabled = !selectedTower.FocusEnabled;
                     targetingButtonClicked = true;
                 }
             }
@@ -163,9 +162,11 @@ namespace TestGame001
         }
 
 
-        public void Draw(SpriteBatch spriteBatch, Tower selectedTower, Enemy selectedEnemy, bool isPaused)
+        public void Draw(SpriteBatch spriteBatch, Tower selectedTower, Enemy selectedEnemy, bool isPaused, int gold)
         {
             spriteBatch.Draw(pixel, uiBarRect, Color.DarkSlateGray);
+
+            spriteBatch.DrawString(uiFont, "Gold: " + gold, new Vector2(GameConstants.ScreenWidth - 340, 30), Color.Gold);
 
             DrawButton(spriteBatch, buildButtonRect, "TOWER", (IsBuildMode || ShowTowerDropdown) ? Color.LimeGreen : Color.DarkGray);
             DrawButton(spriteBatch, pauseButtonRect, "PAUSE", isPaused ? Color.LimeGreen : Color.DarkGray);
@@ -183,7 +184,7 @@ namespace TestGame001
                 DrawButton(spriteBatch, TargetLeastHealthRect, "LEAST HP", selectedTower.TargetingMode == TargetingMode.LeastHealth ? Color.LimeGreen : Color.DarkGray);
                 DrawButton(spriteBatch, TargetExitRect, "EXIT", selectedTower.TargetingMode == TargetingMode.ClosestToExit ? Color.LimeGreen : Color.DarkGray);
                 DrawButton(spriteBatch, TargetEntranceRect, "ENTRANCE", selectedTower.TargetingMode == TargetingMode.ClosestToEntrance ? Color.LimeGreen : Color.DarkGray);
-                DrawButton(spriteBatch, TargetFocusRect, "FOCUS", selectedTower.TargetingMode == TargetingMode.Focus ? Color.LimeGreen : Color.DarkGray);
+                DrawButton(spriteBatch, TargetFocusRect, "FOCUS", selectedTower.FocusEnabled ? Color.LimeGreen : Color.DarkGray);
 
                 Vector2 statsOrigin = new Vector2(750, 10);
                 int lineHeight = 22;
