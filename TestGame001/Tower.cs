@@ -7,6 +7,10 @@ namespace TestGame001
     // subclass, each of which fixes its own combat stats.
     public abstract class Tower
     {
+        // Current bullet tint for this tower. Starts at the shared default and can be changed later
+        // by upgrades (elemental effects, etc.) without needing a new Tower subclass.
+        public Color BulletTint { get; set; } = new Color(150, 200, 255); // white/blue default
+
         // Grid-snapped world position (top-left corner of the tile it occupies). Set once at
         // construction and never moved afterward.
         public Vector2 Position { get; }

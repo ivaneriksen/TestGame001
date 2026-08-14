@@ -30,7 +30,7 @@ namespace TestGame001
         public Rectangle TargetLeastHealthRect { get; private set; }
         public Rectangle TargetExitRect { get; private set; }
         public Rectangle TargetEntranceRect { get; private set; }
-        public Rectangle TargetFocusRect { get; private set; } // repurposed as the Focus *toggle* button now
+        public Rectangle TargetFocusRect { get; private set; } // Focus toggle button - not a TargetingMode, see Update
 
         public UIManager(SpriteFont uiFont, Texture2D pixel)
         {
@@ -41,7 +41,6 @@ namespace TestGame001
             buildButtonRect = new Rectangle(20, 15, GameConstants.DefaultButtonWidth, GameConstants.DefaultButtonHeight);
             towerOptionBasicRect = new Rectangle(20, 90, GameConstants.DefaultButtonWidth, GameConstants.DefaultButtonHeight);
             towerOptionSniperRect = new Rectangle(20, 150, GameConstants.DefaultButtonWidth, GameConstants.DefaultButtonHeight);
-
             pauseButtonRect = new Rectangle(GameConstants.ScreenWidth - 160, 15, GameConstants.DefaultButtonWidth, GameConstants.DefaultButtonHeight);
 
             TargetClosestRect = new Rectangle(300, 15, GameConstants.DefaultButtonWidth, GameConstants.DefaultButtonHeight);
@@ -54,20 +53,6 @@ namespace TestGame001
 
         public bool IsPointInBar(Point p) => uiBarRect.Contains(p);
 
-        // Draws a button rect filled with the given color, with its label auto-centered using the
-        // font's actual measured size - avoids hand-tuned pixel offsets that break when button size
-        // or label text changes.
-        private void DrawButton(SpriteBatch spriteBatch, Rectangle rect, string label, Color color)
-        {
-            spriteBatch.Draw(pixel, rect, color);
-
-            Vector2 textSize = uiFont.MeasureString(label);
-            Vector2 textPos = new Vector2(
-                rect.X + (rect.Width - textSize.X) / 2f,
-                rect.Y + (rect.Height - textSize.Y) / 2f + 4f);
-
-            spriteBatch.DrawString(uiFont, label, textPos, Color.White);
-        }
         public void Update(MouseState mouseState, MouseState previousMouseState, KeyboardState keyboardState, KeyboardState previousKeyboardState, Tower selectedTower)
         {
             bool clickedThisFrame = mouseState.LeftButton == ButtonState.Pressed && previousMouseState.LeftButton == ButtonState.Released;
@@ -76,7 +61,6 @@ namespace TestGame001
             bool clickedPauseButton = clickedThisFrame && pauseButtonRect.Contains(mouseState.Position);
 
             PauseButtonClicked = clickedPauseButton;
-            
 
             bool buildToggleTriggered = (keyboardState.IsKeyDown(Keys.B) && !previousKeyboardState.IsKeyDown(Keys.B)) || clickedBuildButton;
             if (buildToggleTriggered)
@@ -161,7 +145,6 @@ namespace TestGame001
             ShowTowerDropdown = false;
         }
 
-
         public void Draw(SpriteBatch spriteBatch, Tower selectedTower, Enemy selectedEnemy, bool isPaused, int gold)
         {
             spriteBatch.Draw(pixel, uiBarRect, Color.DarkSlateGray);
@@ -186,60 +169,88 @@ namespace TestGame001
                 DrawButton(spriteBatch, TargetEntranceRect, "ENTRANCE", selectedTower.TargetingMode == TargetingMode.ClosestToEntrance ? Color.LimeGreen : Color.DarkGray);
                 DrawButton(spriteBatch, TargetFocusRect, "FOCUS", selectedTower.FocusEnabled ? Color.LimeGreen : Color.DarkGray);
 
-                Vector2 statsOrigin = new Vector2(750, 10);
-                int lineHeight = 22;
-                int valueColumnX = 150;
-
-                string[] labels = { "Damage:", "Bullet speed:", "Range:", "Cooldown:" };
-                string[] values =
-                {
-                    selectedTower.Damage.ToString(),
-                    selectedTower.BulletSpeed.ToString(),
-                    selectedTower.Range.ToString(),
-                    selectedTower.Cooldown.TotalSeconds + "s"
-                };
-
-                for (int i = 0; i < labels.Length; i++)
-                {
-                    Vector2 rowPos = statsOrigin + new Vector2(0, i * lineHeight);
-                    spriteBatch.DrawString(uiFont, labels[i], rowPos, Color.White);
-                    spriteBatch.DrawString(uiFont, values[i], rowPos + new Vector2(valueColumnX, 0), Color.White);
-                }
+                DrawTowerStats(spriteBatch, selectedTower);
             }
             else if (selectedEnemy != null)
             {
-                Vector2 statsOrigin = new Vector2(750, 10);
-                int lineHeight = 22;
-                int valueColumnX = 150;
+                DrawEnemyStats(spriteBatch, selectedEnemy);
+            }
+        }
 
-                string[] nameParts = selectedEnemy.Name.Split(' ');
-                string firstName = nameParts[0];
-                string surname = nameParts.Length > 1 ? nameParts[1] : "";
+        // Draws a button rect filled with the given color, with its label auto-centered using the
+        // font's actual measured size - avoids hand-tuned pixel offsets that break when button size
+        // or label text changes.
+        private void DrawButton(SpriteBatch spriteBatch, Rectangle rect, string label, Color color)
+        {
+            spriteBatch.Draw(pixel, rect, color);
 
-                const int nameGapPixels = 14;
-                spriteBatch.DrawString(uiFont, "Name:", statsOrigin, Color.White);
+            Vector2 textSize = uiFont.MeasureString(label);
+            Vector2 textPos = new Vector2(
+                rect.X + (rect.Width - textSize.X) / 2f,
+                rect.Y + (rect.Height - textSize.Y) / 2f + 4f);
 
-                Vector2 firstNamePos = statsOrigin + new Vector2(valueColumnX, 0);
-                spriteBatch.DrawString(uiFont, firstName, firstNamePos, Color.White);
+            spriteBatch.DrawString(uiFont, label, textPos, Color.White);
+        }
 
-                float firstNameWidth = uiFont.MeasureString(firstName).X;
-                Vector2 surnamePos = firstNamePos + new Vector2(firstNameWidth + nameGapPixels, 0);
-                spriteBatch.DrawString(uiFont, surname, surnamePos, Color.White);
+        private void DrawTowerStats(SpriteBatch spriteBatch, Tower tower)
+        {
+            Vector2 statsOrigin = new Vector2(750, 10);
+            int lineHeight = 22;
+            int valueColumnX = 150;
 
-                string[] labels = { "Max HP:", "Current HP:", "Speed:" };
-                string[] values =
-                {
-                    selectedEnemy.MaxHealth.ToString(),
-                    selectedEnemy.Health.ToString(),
-                    selectedEnemy.Speed.ToString()
-                };
+            string[] labels = { "Damage:", "Bullet speed:", "Range:", "Cooldown:" };
+            string[] values =
+            {
+                tower.Damage.ToString(),
+                tower.BulletSpeed.ToString(),
+                tower.Range.ToString(),
+                tower.Cooldown.TotalSeconds + "s"
+            };
 
-                for (int i = 0; i < labels.Length; i++)
-                {
-                    Vector2 rowPos = statsOrigin + new Vector2(0, (i + 1) * lineHeight);
-                    spriteBatch.DrawString(uiFont, labels[i], rowPos, Color.White);
-                    spriteBatch.DrawString(uiFont, values[i], rowPos + new Vector2(valueColumnX, 0), Color.White);
-                }
+            for (int i = 0; i < labels.Length; i++)
+            {
+                Vector2 rowPos = statsOrigin + new Vector2(0, i * lineHeight);
+                spriteBatch.DrawString(uiFont, labels[i], rowPos, Color.White);
+                spriteBatch.DrawString(uiFont, values[i], rowPos + new Vector2(valueColumnX, 0), Color.White);
+            }
+        }
+
+        private void DrawEnemyStats(SpriteBatch spriteBatch, Enemy enemy)
+        {
+            Vector2 statsOrigin = new Vector2(750, 10);
+            int lineHeight = 22;
+            int valueColumnX = 150;
+
+            // Split into first/last so we can control the visual gap directly - MonoGame's
+            // compiled SpriteFont gives the space character an unreliably narrow advance width
+            // even on a monospace source font, so we don't rely on it here.
+            string[] nameParts = enemy.Name.Split(' ');
+            string firstName = nameParts[0];
+            string surname = nameParts.Length > 1 ? nameParts[1] : "";
+
+            const int nameGapPixels = 14;
+            spriteBatch.DrawString(uiFont, "Name:", statsOrigin, Color.White);
+
+            Vector2 firstNamePos = statsOrigin + new Vector2(valueColumnX, 0);
+            spriteBatch.DrawString(uiFont, firstName, firstNamePos, Color.White);
+
+            float firstNameWidth = uiFont.MeasureString(firstName).X;
+            Vector2 surnamePos = firstNamePos + new Vector2(firstNameWidth + nameGapPixels, 0);
+            spriteBatch.DrawString(uiFont, surname, surnamePos, Color.White);
+
+            string[] labels = { "Max HP:", "Current HP:", "Speed:" };
+            string[] values =
+            {
+                enemy.MaxHealth.ToString(),
+                enemy.Health.ToString(),
+                enemy.Speed.ToString()
+            };
+
+            for (int i = 0; i < labels.Length; i++)
+            {
+                Vector2 rowPos = statsOrigin + new Vector2(0, (i + 1) * lineHeight);
+                spriteBatch.DrawString(uiFont, labels[i], rowPos, Color.White);
+                spriteBatch.DrawString(uiFont, values[i], rowPos + new Vector2(valueColumnX, 0), Color.White);
             }
         }
     }

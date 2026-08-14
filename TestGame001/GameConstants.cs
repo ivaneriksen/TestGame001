@@ -28,5 +28,7 @@
 
         public const float EnemyScale = 0.45f;
         public const float WaypointRadius = GridSize * 0.4f;
+        public const float BulletLengthScale = 1.4f;
+        public const float BulletWidthScale = 0.4f;
     }
 }

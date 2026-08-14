@@ -8,8 +8,8 @@ namespace TestGame001
     // concrete subclass, each of which fixes its own health/speed.
     public abstract class Enemy
     {
-
         public string Name { get; }
+
         // Top-left world position, updated every frame as the enemy moves along the path.
         public Vector2 Position;
 
@@ -19,15 +19,19 @@ namespace TestGame001
         // Index into the path's waypoint list of the waypoint this enemy is currently walking toward.
         public int CurrentWaypointIndex = 0;
 
+        // The specific point (within the current target waypoint's circle) this enemy is walking
+        // toward - re-rolled each time CurrentWaypointIndex advances, so enemies in a group spread
+        // out rather than all converging on the same pixel.
+        public Vector2 CurrentTargetPoint { get; set; }
+
         // Movement/health stats - fixed per concrete enemy type, set once via the constructor.
         public int MaxHealth { get; }
         public float Speed { get; }
         public Texture2D Texture { get; }
+        public int GoldValue { get; }
 
         // Current remaining health; ticks down as bullets land.
         public float Health { get; set; }
-        public int GoldValue { get; }
-        public Vector2 CurrentTargetPoint { get; set; }
 
         protected Enemy(Vector2 startPosition, int maxHealth, float speed, Texture2D texture, int goldValue)
         {
@@ -71,20 +75,20 @@ namespace TestGame001
     public class BasicEnemy : Enemy
     {
         public BasicEnemy(Vector2 startPosition, Texture2D texture)
-            : base(startPosition, maxHealth: 50, speed: 2f, texture, 2) { }
+            : base(startPosition, maxHealth: 50, speed: 2f, texture, goldValue: 2) { }
     }
 
     // Low health, high speed.
     public class FastEnemy : Enemy
     {
         public FastEnemy(Vector2 startPosition, Texture2D texture)
-            : base(startPosition, maxHealth: 50, speed: 4f, texture, 2) { }
+            : base(startPosition, maxHealth: 50, speed: 4f, texture, goldValue: 2) { }
     }
 
     // High health, low speed.
     public class TankEnemy : Enemy
     {
         public TankEnemy(Vector2 startPosition, Texture2D texture)
-            : base(startPosition, maxHealth: 300, speed: 1f, texture, 2) { }
+            : base(startPosition, maxHealth: 300, speed: 1f, texture, goldValue: 2) { }
     }
 }

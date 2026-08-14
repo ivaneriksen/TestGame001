@@ -9,6 +9,8 @@ namespace TestGame001
     // comes within HitRadius of, and expires once it's traveled MaxRange without hitting anything.
     public class Bullet
     {
+        public Color Tint;
+
         // Current world position, advanced each Update call.
         public Vector2 Position;
 
@@ -32,12 +34,13 @@ namespace TestGame001
         // Distance traveled so far this bullet's lifetime, used to check against MaxRange.
         private float distanceTraveled = 0f;
 
-        public Bullet(Vector2 startPosition, Vector2 initialAimPoint, float damage, float speed, float maxRange)
+        public Bullet(Vector2 startPosition, Vector2 initialAimPoint, float damage, float speed, float maxRange, Color tint)
         {
             Position = startPosition;
             Damage = damage;
             Speed = speed;
             MaxRange = maxRange;
+            Tint = tint;
 
             // Aim once, at spawn time, toward wherever the target was when the shot was fired.
             Vector2 toAimPoint = initialAimPoint - startPosition;

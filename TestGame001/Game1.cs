@@ -57,24 +57,17 @@ namespace TestGame001
         KeyboardState _previousKeyboardState = new KeyboardState();
         MouseState _previousMouseState = new MouseState();
 
-        // --- UI state ---
-        
+        // --- Selection state ---
         Tower selectedTower = null; // currently clicked/selected placed tower, or null if none selected
-        Enemy selectedEnemy = null;
-
-
-
-
-
+        Enemy selectedEnemy = null; // currently clicked/selected enemy, or null if none selected
 
         // Shared tint for every range-indicator circle (selected tower, build preview, etc.) - change this
         // one value to restyle all of them at once.
         static readonly Color RangeIndicatorTint = Color.White * 0.4f;
 
-        // UI bar (top of screen) and its buttons.
+        // --- Sub-managers ---
         UIManager uiManager;
         GameStateManager gameStateManager = new GameStateManager();
-
         Economy economy = new Economy(GameConstants.StartingGold);
 
         public Game1()
@@ -161,11 +154,12 @@ namespace TestGame001
                 int gridY = mouseState.Y / GameConstants.GridSize;
                 Vector2 snappedPosition = new Vector2(gridX * GameConstants.GridSize, gridY * GameConstants.GridSize);
 
-                Type selectedType = uiManager.SelectedTowerFactory(Vector2.Zero).GetType();
+                Tower newTower = uiManager.SelectedTowerFactory(snappedPosition);
+                Type selectedType = newTower.GetType();
 
                 if (!towers.Any(t => t.Position == snappedPosition) && IsBuildableTile(snappedPosition) && economy.CanAfford(selectedType))
                 {
-                    towers.Add(uiManager.SelectedTowerFactory(snappedPosition));
+                    towers.Add(newTower);
                     economy.PurchaseTower(selectedType);
                 }
             }
@@ -219,7 +213,7 @@ namespace TestGame001
                         Enemy target = SelectTarget(tower);
                         if (target != null)
                         {
-                            bullets.Add(new Bullet(tower.GetCenter(), target.GetCenter(), tower.Damage, tower.BulletSpeed, tower.Range));
+                            bullets.Add(new Bullet(tower.GetCenter(), target.GetCenter(), tower.Damage, tower.BulletSpeed, tower.Range, tower.BulletTint));
                             tower.TimeSinceLastShot = TimeSpan.Zero;
                         }
                     }
@@ -231,10 +225,9 @@ namespace TestGame001
                     Enemy hitEnemy = bullet.Update(enemies, (float)gameTime.ElapsedGameTime.TotalSeconds);
                     if (hitEnemy != null)
                     {
-                        hitEnemy.Health -= bullet.Damage;
+                        hitEnemy.TakeDamage(bullet.Damage);
                         if (hitEnemy.Health <= 0)
                         {
-                            hitEnemy.IsActive = false;
                             economy.AddGold(hitEnemy.GoldValue);
                         }
                     }
@@ -380,7 +373,20 @@ namespace TestGame001
         {
             foreach (var bullet in bullets)
             {
-                _spriteBatch.Draw(bulletTexture, bullet.Position, Color.Yellow);
+                float rotation = (float)Math.Atan2(bullet.Direction.Y, bullet.Direction.X);
+                Vector2 origin = new Vector2(bulletTexture.Width / 2f, bulletTexture.Height / 2f);
+
+                _spriteBatch.Draw(
+                    bulletTexture,
+                    bullet.Position,
+                    null,
+                    bullet.Tint,
+                    rotation,
+                    origin,
+                    new Vector2(GameConstants.BulletLengthScale, GameConstants.BulletWidthScale),
+                    SpriteEffects.None,
+                    0f
+                );
             }
         }
 
@@ -415,11 +421,8 @@ namespace TestGame001
             Color ghostTint = (validPlacement && canAfford) ? Color.White * 0.5f : Color.Red * 0.5f;
             _spriteBatch.Draw(towerTexture, previewPos, ghostTint);
 
-            
             DrawRangeCircle(previewCenter, selectedTowerType.Range, RangeIndicatorTint);
         }
-
-        
 
         // Shared helper for drawing a tower's range as a circle centered on a world position.
         private void DrawRangeCircle(Vector2 center, float range, Color tint)
@@ -439,12 +442,11 @@ namespace TestGame001
             );
         }
 
-        
-
         // --- Targeting ---
 
         // Picks which enemy a firing tower should aim at, based on its TargetingMode, among
-        // enemies currently within range.
+        // enemies currently within range. If FocusEnabled and the tower's current target is
+        // still alive and in range, that target is kept regardless of mode ranking.
         private Enemy SelectTarget(Tower tower)
         {
             var inRange = enemies.Where(e =>
@@ -482,6 +484,7 @@ namespace TestGame001
                     picked = inRange.OrderBy(e => Vector2.Distance(tower.GetCenter(), e.GetCenter())).FirstOrDefault();
                     break;
             }
+
             tower.CurrentTarget = picked;
             return picked;
         }
@@ -521,6 +524,7 @@ namespace TestGame001
                 pathTiles.Add(GridCellOf(end));
             }
         }
+
         // True if this grid cell is plain grass - not part of the path, and not one of the
         // grass/dirt transition tiles (edges/corners) bordering it.
         private bool IsBuildableTile(Vector2 snappedPosition)
@@ -531,6 +535,7 @@ namespace TestGame001
 
             return !pathTiles.Contains(cell) && !mapTileLookup.ContainsKey(cell);
         }
+
         // Converts a world position to its containing grid cell. Uses Math.Floor (not integer
         // division) so negative coordinates snap correctly.
         private Point GridCellOf(Vector2 worldPos)
@@ -540,6 +545,9 @@ namespace TestGame001
             return new Point(gx, gy);
         }
 
+        // Picks a uniformly random point within radius of center - used to give each enemy a
+        // slightly different wander target within a waypoint's circle instead of all enemies
+        // converging on the exact same pixel.
         private Vector2 GetRandomPointInWaypointCircle(Vector2 center, float radius)
         {
             double angle = random.NextDouble() * Math.PI * 2;
