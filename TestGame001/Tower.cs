@@ -58,7 +58,7 @@ namespace TestGame001
         public override TimeSpan Cooldown => TimeSpan.FromSeconds(2.5);
         public override float Range => 350f;
         public override float Damage => 60f;
-        public override float BulletSpeed => 2400f;
+        public override float BulletSpeed => 4200f;
 
         public SniperTower(Vector2 position) : base(position) { }
     }

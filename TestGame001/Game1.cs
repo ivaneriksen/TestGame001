@@ -1,9 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.Xna.Framework;
+﻿using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using static TestGame001.WaveManager;
 
 namespace TestGame001
 {
@@ -51,7 +52,6 @@ namespace TestGame001
         List<Tower> towers = new List<Tower>();
         List<Enemy> enemies = new List<Enemy>();
         List<Bullet> bullets = new List<Bullet>();
-        float spawnTimer = 0f;
 
         // --- Input state (previous frame, for edge-detecting clicks/key presses) ---
         KeyboardState _previousKeyboardState = new KeyboardState();
@@ -65,10 +65,15 @@ namespace TestGame001
         // one value to restyle all of them at once.
         static readonly Color RangeIndicatorTint = Color.White * 0.4f;
 
+
+        string waveClearMessage = null;
+        float waveClearMessageTimer = 0f;
+
         // --- Sub-managers ---
         UIManager uiManager;
         GameStateManager gameStateManager = new GameStateManager();
         Economy economy = new Economy(GameConstants.StartingGold);
+        WaveManager waveManager = new WaveManager();
 
         public Game1()
         {
@@ -140,6 +145,12 @@ namespace TestGame001
             uiManager.Update(mouseState, _previousMouseState, keyboardState, _previousKeyboardState, selectedTower);
             gameStateManager.Update(keyboardState, _previousKeyboardState, uiManager.PauseButtonClicked);
 
+            // DEV MODE - remove before release. Grants free gold for testing.
+            if (keyboardState.IsKeyDown(Keys.G) && !_previousKeyboardState.IsKeyDown(Keys.G))
+            {
+                economy.AddGold(10000);
+            }
+
             if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
             {
                 uiManager.CancelBuildMode();
@@ -196,6 +207,11 @@ namespace TestGame001
                         selectedEnemy = clickedEnemy;
                         selectedTower = null;
                     }
+                    else
+                    {
+                        selectedTower = null;
+                        selectedEnemy = null;
+                    }
                 }
             }
 
@@ -204,6 +220,10 @@ namespace TestGame001
 
             if (!gameStateManager.IsPaused)
             {
+                if (waveClearMessageTimer > 0f)
+                {
+                    waveClearMessageTimer -= (float)gameTime.ElapsedGameTime.TotalSeconds;
+                }
                 // Tower firing: each tower on cooldown picks a target per its TargetingMode and fires.
                 foreach (var tower in towers)
                 {
@@ -226,9 +246,10 @@ namespace TestGame001
                     if (hitEnemy != null)
                     {
                         hitEnemy.TakeDamage(bullet.Damage);
-                        if (hitEnemy.Health <= 0)
+                        if (!hitEnemy.IsActive)
                         {
                             economy.AddGold(hitEnemy.GoldValue);
+                            HandleWaveClearCheck(waveManager.ReportEnemyRemoved(hitEnemy.WaveNumber, escaped: false));
                         }
                     }
                 }
@@ -240,14 +261,14 @@ namespace TestGame001
                     selectedEnemy = null;
                 }
 
-                // Enemy spawn timer.
-                spawnTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
-                if (spawnTimer > 2.0f)
+                // Wave-based enemy spawning.
+                EnemyType? typeToSpawn = waveManager.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
+                if (typeToSpawn != null)
                 {
-                    var newEnemy = new BasicEnemy(path[0], enemyTexture);
+                    Enemy newEnemy = CreateEnemy(typeToSpawn.Value);
+                    newEnemy.WaveNumber = waveManager.CurrentWaveNumber;
                     newEnemy.CurrentTargetPoint = GetRandomPointInWaypointCircle(path[0], GameConstants.WaypointRadius);
                     enemies.Add(newEnemy);
-                    spawnTimer = 0;
                 }
 
                 // Enemy movement along the path.
@@ -275,6 +296,7 @@ namespace TestGame001
                     else
                     {
                         enemy.IsActive = false;
+                        HandleWaveClearCheck(waveManager.ReportEnemyRemoved(enemy.WaveNumber, escaped: true));
                     }
                 }
             }
@@ -295,6 +317,17 @@ namespace TestGame001
             DrawBuildPreview();
             uiManager.Draw(_spriteBatch, selectedTower, selectedEnemy, gameStateManager.IsPaused, economy.Gold);
             gameStateManager.Draw(_spriteBatch, pixel, uiFont, GraphicsDevice.Viewport.Bounds);
+
+            if (waveClearMessageTimer > 0f)
+            {
+                float alpha = MathHelper.Clamp(waveClearMessageTimer / GameConstants.WaveClearMessageDuration, 0f, 1f);
+                float textWidth = TextRenderHelper.MeasureSpacedString(uiFont, waveClearMessage);
+                Vector2 textPos = new Vector2(
+                    GameConstants.ScreenWidth / 2f - textWidth / 2f,
+                    GameConstants.PlayableAreaTop + 40);
+
+                TextRenderHelper.DrawSpacedString(_spriteBatch, uiFont, waveClearMessage, textPos, Color.Gold * alpha);
+            }
 
             _spriteBatch.End();
             base.Draw(gameTime);
@@ -489,6 +522,24 @@ namespace TestGame001
             return picked;
         }
 
+        // Creates a concrete Enemy instance for the given EnemyType, spawned at the path start.
+        private Enemy CreateEnemy(EnemyType type)
+        {
+            switch (type)
+            {
+                case EnemyType.Basic:
+                default:
+                    return new BasicEnemy(path[0], enemyTexture);
+            }
+        }
+        private void HandleWaveClearCheck(WaveClearResult? result)
+        {
+            if (result == null) return;
+
+            economy.AddGold(result.Value.BonusGold);
+            waveClearMessage = $"WAVE {result.Value.WaveNumber} CLEARED! +{result.Value.BonusGold} GOLD";
+            waveClearMessageTimer = GameConstants.WaveClearMessageDuration;
+        }
         // --- Grid / path helpers ---
 
         // Rounds a world position to the nearest grid cell corner, so path waypoints always land

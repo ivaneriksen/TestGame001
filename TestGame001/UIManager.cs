@@ -221,22 +221,9 @@ namespace TestGame001
             int lineHeight = 22;
             int valueColumnX = 150;
 
-            // Split into first/last so we can control the visual gap directly - MonoGame's
-            // compiled SpriteFont gives the space character an unreliably narrow advance width
-            // even on a monospace source font, so we don't rely on it here.
-            string[] nameParts = enemy.Name.Split(' ');
-            string firstName = nameParts[0];
-            string surname = nameParts.Length > 1 ? nameParts[1] : "";
-
-            const int nameGapPixels = 14;
             spriteBatch.DrawString(uiFont, "Name:", statsOrigin, Color.White);
-
-            Vector2 firstNamePos = statsOrigin + new Vector2(valueColumnX, 0);
-            spriteBatch.DrawString(uiFont, firstName, firstNamePos, Color.White);
-
-            float firstNameWidth = uiFont.MeasureString(firstName).X;
-            Vector2 surnamePos = firstNamePos + new Vector2(firstNameWidth + nameGapPixels, 0);
-            spriteBatch.DrawString(uiFont, surname, surnamePos, Color.White);
+            Vector2 namePos = statsOrigin + new Vector2(valueColumnX, 0);
+            TextRenderHelper.DrawSpacedString(spriteBatch, uiFont, enemy.Name, namePos, Color.White);
 
             string[] labels = { "Max HP:", "Current HP:", "Speed:" };
             string[] values =

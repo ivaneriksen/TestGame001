@@ -30,5 +30,14 @@
         public const float WaypointRadius = GridSize * 0.4f;
         public const float BulletLengthScale = 1.4f;
         public const float BulletWidthScale = 0.4f;
+
+        public const int BaseWaveSize = 8;
+        public const int WaveSizeGrowthPerWave = 1; // +1 enemy per wave number, for now
+        public const float MinSpawnDelaySeconds = 0.1f;
+        public const float MaxSpawnDelaySeconds = 1.0f;
+        public const float InterWaveDelaySeconds = 4f;
+        public const float InitialWaveDelaySeconds = 3f;
+        public const int WaveClearBonusGold = 5;
+        public const float WaveClearMessageDuration = 2.5f;
     }
 }

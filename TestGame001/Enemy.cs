@@ -29,6 +29,7 @@ namespace TestGame001
         public float Speed { get; }
         public Texture2D Texture { get; }
         public int GoldValue { get; }
+        public int WaveNumber { get; set; }
 
         // Current remaining health; ticks down as bullets land.
         public float Health { get; set; }
